@@ -23,13 +23,9 @@ public class Temporizador {
         this.temporizador = new TemporizadorInterno(this, milisegundosFuturos, intervaloCuentaRegresiva);
     }
 
-    public interface EscuchadorTick {
-        void enTick(long milisegundosRestantes);
-    }
+    public interface EscuchadorTick {void enTick(long milisegundosRestantes);}
 
-    public interface EscuchadorFinalizacion {
-        void enFinalizacion();
-    }
+    public interface EscuchadorFinalizacion {void enFinalizacion();}
 
     public void setEscuchadorTick(EscuchadorTick escuchadorTick) {
         this.escuchadorTick = escuchadorTick;
@@ -94,4 +90,11 @@ public class Temporizador {
     public void destruirTemporizador() {
         temporizador.cancel();
     }
+    public void pararTemporizador() {
+        if (temporizador != null) {
+            temporizador.cancel();
+            temporizador = null;
+        }
+    }
+
 }

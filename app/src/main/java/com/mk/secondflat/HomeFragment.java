@@ -1,10 +1,21 @@
 package com.mk.secondflat;
 
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.ServiceConnection;
+import android.media.MediaPlayer;
+import android.media.RingtoneManager;
+import android.net.Uri;
 import android.os.Bundle;
 
 import androidx.appcompat.widget.AppCompatTextView;
 import androidx.fragment.app.Fragment;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import android.os.IBinder;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -19,11 +30,49 @@ public class HomeFragment extends Fragment {
     AppCompatTextView tiempo;
     TabLayout tabLayout;
     private CircularProgressIndicator barraProgresoCircular;
-    private MaterialButton botonParar, botonIniciar, botonPausar, botonContinuar, botonPararAlarma;
+    private MaterialButton bParar, bIniciar, bPausar, bContinuar, bPararAlarma;
     private Temporizador temporizador;
     private boolean iniciarTemporizador = false;
-    private int tiempoTrabajo = 5;
-    private int tiempoDescanso = 1;
+    private int tiempoTrabajo = 5, tiempoDescanso = 1;
+
+    private ServicioTemporizador servicioTemporizador;
+    private boolean vinculado = false;
+    //-------
+    private BroadcastReceiver receptorPararAlarma;
+    private MediaPlayer mediaPlayer;
+    private ServiceConnection conexion = new ServiceConnection() {
+
+        @Override
+        public void onServiceConnected(ComponentName className, IBinder service) {
+            ServicioTemporizador.VinculadorTemporizador vinculador = (ServicioTemporizador.VinculadorTemporizador) service;
+            servicioTemporizador = vinculador.obtenerServicio();
+            vinculado = true;
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName arg0) {
+            vinculado = false;
+        }
+    };
+    @Override
+    public void onStart() {
+        super.onStart();
+        Intent intento = new Intent(getActivity(), ServicioTemporizador.class);
+        getActivity().bindService(intento, conexion, Context.BIND_AUTO_CREATE);
+        //-------
+        LocalBroadcastManager.getInstance(getActivity()).registerReceiver(receptorPararAlarma, new IntentFilter(ReceptorPararAlarma.ACCION_PARAR_ALARMA));
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        if (vinculado) {
+            getActivity().unbindService(conexion);
+            vinculado = false;
+        }
+        //----
+        LocalBroadcastManager.getInstance(getActivity()).unregisterReceiver(receptorPararAlarma);
+    }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -38,11 +87,14 @@ public class HomeFragment extends Fragment {
         tabLayout = view.findViewById(R.id.tlOptionsTime);
         tiempo = view.findViewById(R.id.tvTime);
         barraProgresoCircular = view.findViewById(R.id.pbCircle);
-        botonParar = view.findViewById(R.id.btnStop);
-        botonIniciar = view.findViewById(R.id.btnPlay);
-        botonPausar = view.findViewById(R.id.btnPause);
-        botonContinuar = view.findViewById(R.id.btnContinue);
-        botonPararAlarma = view.findViewById(R.id.btnStopAlarm);
+        bParar = view.findViewById(R.id.btnStop);
+        bIniciar = view.findViewById(R.id.btnPlay);
+        bPausar = view.findViewById(R.id.btnPause);
+        bContinuar = view.findViewById(R.id.btnContinue);
+        bPararAlarma = view.findViewById(R.id.btnStopAlarm);
+        Uri alarm = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+        mediaPlayer = MediaPlayer.create(getActivity(), alarm);
+
         tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabSelected(TabLayout.Tab tab) {
@@ -54,10 +106,10 @@ public class HomeFragment extends Fragment {
                 } else if (position == 1) {
                     prepararTemporizador(tiempoDescanso * 60);
                 }
-                botonIniciar.setVisibility(View.VISIBLE);
-                botonPausar.setVisibility(View.GONE);
-                botonContinuar.setVisibility(View.GONE);
-                botonParar.setVisibility(View.GONE);
+                bIniciar.setVisibility(View.VISIBLE);
+                bPausar.setVisibility(View.GONE);
+                bContinuar.setVisibility(View.GONE);
+                bParar.setVisibility(View.GONE);
             }
             @Override
             public void onTabUnselected(TabLayout.Tab tab) {}
@@ -66,26 +118,55 @@ public class HomeFragment extends Fragment {
             public void onTabReselected(TabLayout.Tab tab) {}
         });
         prepararTemporizador(tiempoTrabajo * 60);
-        botonParar.setOnClickListener(v -> reiniciarTemporizadorYActualizarBotones());
-        botonIniciar.setOnClickListener(v -> {
+        bParar.setOnClickListener(v -> reiniciarTemporizadorYActualizarBotones());
+        bIniciar.setOnClickListener(v -> {
             iniciarTemporizador = true;
             temporizador.iniciarTemporizador();
-            botonIniciar.setVisibility(View.GONE);
-            botonPausar.setVisibility(View.VISIBLE);
-            botonParar.setVisibility(View.VISIBLE);
+            bIniciar.setVisibility(View.GONE);
+            bPausar.setVisibility(View.VISIBLE);
+            bParar.setVisibility(View.VISIBLE);
         });
-        botonPausar.setOnClickListener(v -> {
+        bPausar.setOnClickListener(v -> {
             temporizador.pausarTemporizador();
-            botonPausar.setVisibility(View.GONE);
-            botonContinuar.setVisibility(View.VISIBLE);
+            bPausar.setVisibility(View.GONE);
+            bContinuar.setVisibility(View.VISIBLE);
         });
-        botonContinuar.setOnClickListener(v -> {
+        bContinuar.setOnClickListener(v -> {
             temporizador.reanudarTemporizador();
-            botonContinuar.setVisibility(View.GONE);
-            botonPausar.setVisibility(View.VISIBLE);
+            bContinuar.setVisibility(View.GONE);
+            bPausar.setVisibility(View.VISIBLE);
         });
+        bPararAlarma.setOnClickListener(v -> {
+            // Detiene el sonido de la alarma.
+            if (mediaPlayer.isPlaying()) {
+                mediaPlayer.pause();
+                mediaPlayer.seekTo(0);
+            }
+            // Desactiva la repetición del MediaPlayer.
+            mediaPlayer.setLooping(false);
+            // Oculta el botón para detener la alarma.
+            bPararAlarma.setVisibility(View.GONE);
+            temporizador.reiniciarTemporizador(barraProgresoCircular, tiempo);
+            bIniciar.setVisibility(View.VISIBLE);
+        });
+        //----------
+        receptorPararAlarma = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                // Detén la alarma aquí
+                if (mediaPlayer.isPlaying()) {
+                    mediaPlayer.pause();
+                    mediaPlayer.seekTo(0);
+                }
+                // Desactiva la repetición del MediaPlayer.
+                mediaPlayer.setLooping(false);
+                // Oculta el botón para detener la alarma.
+                bPararAlarma.setVisibility(View.GONE);
+            }
+        };
         return view;
     }
+
     private void prepararTemporizador(int segundos) {
         if (temporizador != null) {
             temporizador.destruirTemporizador();
@@ -101,11 +182,17 @@ public class HomeFragment extends Fragment {
 
         temporizador.setEscuchadorFinalizacion(() -> {
             tiempo.setText("00:00");
+            // Reproduce el sonido de la alarma.
+            mediaPlayer.start();
+            // Configura el MediaPlayer para que se repita.
+            mediaPlayer.setLooping(true);
             // Oculta los otros botones.
-            botonIniciar.setVisibility(View.GONE);
-            botonPausar.setVisibility(View.GONE);
-            botonContinuar.setVisibility(View.GONE);
-            botonParar.setVisibility(View.GONE);
+            bIniciar.setVisibility(View.GONE);
+            bPausar.setVisibility(View.GONE);
+            bContinuar.setVisibility(View.GONE);
+            bParar.setVisibility(View.GONE);
+            // Muestra el botón para detener la alarma.
+            bPararAlarma.setVisibility(View.VISIBLE);
         });
         // Mostramos el tiempo inicial sin iniciar el temporizador
         int segundosRestantes = segundos;
@@ -118,9 +205,9 @@ public class HomeFragment extends Fragment {
     }
     private void reiniciarTemporizadorYActualizarBotones() {
         temporizador.reiniciarTemporizador(barraProgresoCircular, tiempo);
-        botonIniciar.setVisibility(View.VISIBLE);
-        botonPausar.setVisibility(View.GONE);
-        botonContinuar.setVisibility(View.GONE);
-        botonParar.setVisibility(View.GONE);
+        bIniciar.setVisibility(View.VISIBLE);
+        bPausar.setVisibility(View.GONE);
+        bContinuar.setVisibility(View.GONE);
+        bParar.setVisibility(View.GONE);
     }
 }
