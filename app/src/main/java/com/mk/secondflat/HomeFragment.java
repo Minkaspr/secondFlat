@@ -1,21 +1,19 @@
 package com.mk.secondflat;
 
-import android.content.BroadcastReceiver;
-import android.content.ComponentName;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.content.ServiceConnection;
+import android.app.Activity;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.content.pm.PackageManager;
 import android.media.MediaPlayer;
-import android.media.RingtoneManager;
-import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 
 import androidx.appcompat.widget.AppCompatTextView;
+import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 import androidx.fragment.app.Fragment;
-import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
-import android.os.IBinder;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -23,66 +21,28 @@ import android.view.ViewGroup;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.progressindicator.CircularProgressIndicator;
 import com.google.android.material.tabs.TabLayout;
+
 import java.util.Locale;
 
 public class HomeFragment extends Fragment {
-
     AppCompatTextView tiempo;
     TabLayout tabLayout;
     private CircularProgressIndicator barraProgresoCircular;
     private MaterialButton bParar, bIniciar, bPausar, bContinuar, bPararAlarma;
     private Temporizador temporizador;
     private boolean iniciarTemporizador = false;
-    private int tiempoTrabajo = 5, tiempoDescanso = 1;
-
-    private ServicioTemporizador servicioTemporizador;
-    private boolean vinculado = false;
-    //-------
-    private BroadcastReceiver receptorPararAlarma;
+    private final int tiempoTrabajo = 5, tiempoDescanso = 1;
     private MediaPlayer mediaPlayer;
-    private ServiceConnection conexion = new ServiceConnection() {
 
-        @Override
-        public void onServiceConnected(ComponentName className, IBinder service) {
-            ServicioTemporizador.VinculadorTemporizador vinculador = (ServicioTemporizador.VinculadorTemporizador) service;
-            servicioTemporizador = vinculador.obtenerServicio();
-            vinculado = true;
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName arg0) {
-            vinculado = false;
-        }
-    };
-    @Override
-    public void onStart() {
-        super.onStart();
-        Intent intento = new Intent(getActivity(), ServicioTemporizador.class);
-        getActivity().bindService(intento, conexion, Context.BIND_AUTO_CREATE);
-        //-------
-        LocalBroadcastManager.getInstance(getActivity()).registerReceiver(receptorPararAlarma, new IntentFilter(ReceptorPararAlarma.ACCION_PARAR_ALARMA));
-    }
-
-    @Override
-    public void onStop() {
-        super.onStop();
-        if (vinculado) {
-            getActivity().unbindService(conexion);
-            vinculado = false;
-        }
-        //----
-        LocalBroadcastManager.getInstance(getActivity()).unregisterReceiver(receptorPararAlarma);
-    }
+    private final static String CHANNEL_ID = "TemporizadorServiceChannel";
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
     }
 
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container,
-                             Bundle savedInstanceState) {
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_home, container, false);
         tabLayout = view.findViewById(R.id.tlOptionsTime);
         tiempo = view.findViewById(R.id.tvTime);
@@ -92,9 +52,7 @@ public class HomeFragment extends Fragment {
         bPausar = view.findViewById(R.id.btnPause);
         bContinuar = view.findViewById(R.id.btnContinue);
         bPararAlarma = view.findViewById(R.id.btnStopAlarm);
-        Uri alarm = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
-        mediaPlayer = MediaPlayer.create(getActivity(), alarm);
-
+        mediaPlayer = MediaPlayer.create(getActivity(), R.raw.racing_into_the_night_yoasobi);
         tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabSelected(TabLayout.Tab tab) {
@@ -102,7 +60,6 @@ public class HomeFragment extends Fragment {
                 iniciarTemporizador = false;
                 if (position == 0) {
                     prepararTemporizador(tiempoTrabajo * 60);
-
                 } else if (position == 1) {
                     prepararTemporizador(tiempoDescanso * 60);
                 }
@@ -111,11 +68,14 @@ public class HomeFragment extends Fragment {
                 bContinuar.setVisibility(View.GONE);
                 bParar.setVisibility(View.GONE);
             }
-            @Override
-            public void onTabUnselected(TabLayout.Tab tab) {}
 
             @Override
-            public void onTabReselected(TabLayout.Tab tab) {}
+            public void onTabUnselected(TabLayout.Tab tab) {
+            }
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
+            }
         });
         prepararTemporizador(tiempoTrabajo * 60);
         bParar.setOnClickListener(v -> reiniciarTemporizadorYActualizarBotones());
@@ -137,34 +97,76 @@ public class HomeFragment extends Fragment {
             bPausar.setVisibility(View.VISIBLE);
         });
         bPararAlarma.setOnClickListener(v -> {
-            // Detiene el sonido de la alarma.
             if (mediaPlayer.isPlaying()) {
                 mediaPlayer.pause();
                 mediaPlayer.seekTo(0);
             }
-            // Desactiva la repetición del MediaPlayer.
             mediaPlayer.setLooping(false);
-            // Oculta el botón para detener la alarma.
             bPararAlarma.setVisibility(View.GONE);
             temporizador.reiniciarTemporizador(barraProgresoCircular, tiempo);
             bIniciar.setVisibility(View.VISIBLE);
         });
-        //----------
-        receptorPararAlarma = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                // Detén la alarma aquí
-                if (mediaPlayer.isPlaying()) {
-                    mediaPlayer.pause();
-                    mediaPlayer.seekTo(0);
-                }
-                // Desactiva la repetición del MediaPlayer.
-                mediaPlayer.setLooping(false);
-                // Oculta el botón para detener la alarma.
-                bPararAlarma.setVisibility(View.GONE);
-            }
-        };
         return view;
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            showNotification();
+        } else {
+            showNewNotificacion(CHANNEL_ID);
+        }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        Activity activity = getActivity();
+        if (activity != null) {
+            NotificationManagerCompat managerCompat = NotificationManagerCompat.from(activity.getApplicationContext());
+            managerCompat.cancel(1);
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        if (mediaPlayer != null) {
+            mediaPlayer.release();
+            mediaPlayer = null;
+        }
+    }
+
+    private void showNotification() {
+        String CHANNEL_ID = "TemporizadorServiceChannel";
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Activity activity = getActivity();
+            if (activity != null) {
+                NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Temporizador en ejecución", NotificationManager.IMPORTANCE_DEFAULT);
+                NotificationManager manager = activity.getSystemService(NotificationManager.class);
+                if (manager != null) {
+                    manager.createNotificationChannel(channel);
+                }
+            }
+        }
+        showNewNotificacion(CHANNEL_ID);
+    }
+
+    private void showNewNotificacion(String CHANNEL_ID) {
+        Activity activity = getActivity();
+        if (activity != null) {
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(activity.getApplicationContext(), CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_temporizador)
+                    .setContentTitle("Temporizador en ejecución")
+                    .setContentText("El temporizador está funcionando en segundo plano.")
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+            NotificationManagerCompat managerCompat = NotificationManagerCompat.from(activity.getApplicationContext());
+            if (ActivityCompat.checkSelfPermission(activity, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                return;
+            }
+            managerCompat.notify(1, builder.build());
+        }
     }
 
     private void prepararTemporizador(int segundos) {
@@ -179,35 +181,49 @@ public class HomeFragment extends Fragment {
             barraProgresoCircular.setProgress(segundosRestantes);
             System.out.println(segundosRestantes);
         });
-
         temporizador.setEscuchadorFinalizacion(() -> {
-            tiempo.setText("00:00");
-            // Reproduce el sonido de la alarma.
-            mediaPlayer.start();
-            // Configura el MediaPlayer para que se repita.
-            mediaPlayer.setLooping(true);
-            // Oculta los otros botones.
+            tiempo.setText(R.string.time_zero);
+            if (mediaPlayer != null) {
+                mediaPlayer.start();
+                mediaPlayer.setLooping(true);
+            }
             bIniciar.setVisibility(View.GONE);
             bPausar.setVisibility(View.GONE);
             bContinuar.setVisibility(View.GONE);
             bParar.setVisibility(View.GONE);
-            // Muestra el botón para detener la alarma.
             bPararAlarma.setVisibility(View.VISIBLE);
+            // Emitir una nueva notificación
+            showFinishedNotification(CHANNEL_ID);
         });
-        // Mostramos el tiempo inicial sin iniciar el temporizador
         int segundosRestantes = segundos;
         tiempo.setText(String.format(Locale.getDefault(), "%02d:%02d", segundosRestantes / 60, segundosRestantes % 60));
         barraProgresoCircular.setProgress(segundosRestantes);
-        // Iniciamos el temporizador solo si iniciarTemporizador es verdadero
         if (iniciarTemporizador) {
             temporizador.iniciarTemporizador();
         }
     }
+
     private void reiniciarTemporizadorYActualizarBotones() {
         temporizador.reiniciarTemporizador(barraProgresoCircular, tiempo);
         bIniciar.setVisibility(View.VISIBLE);
         bPausar.setVisibility(View.GONE);
         bContinuar.setVisibility(View.GONE);
         bParar.setVisibility(View.GONE);
+    }
+
+    private void showFinishedNotification(String CHANNEL_ID) {
+        Activity activity = getActivity();
+        if (activity != null) {
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(activity.getApplicationContext(), CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_temporizador)
+                    .setContentTitle("Nombre de la aplicación")
+                    .setContentText("Tiempo completado")
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+            NotificationManagerCompat managerCompat = NotificationManagerCompat.from(activity.getApplicationContext());
+            if (ActivityCompat.checkSelfPermission(activity, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                return;
+            }
+            managerCompat.notify(1, builder.build());
+        }
     }
 }

@@ -8,8 +8,8 @@ import com.google.android.material.progressindicator.CircularProgressIndicator;
 import java.util.Locale;
 
 public class Temporizador {
-    private long milisegundosFuturos;
-    private long intervaloCuentaRegresiva;
+    private final long milisegundosFuturos;
+    private final long intervaloCuentaRegresiva;
     private long milisegundosRestantes;
     private TemporizadorInterno temporizador;
     private boolean estaCorriendo = false;
@@ -35,14 +35,12 @@ public class Temporizador {
         this.escuchadorFinalizacion = escuchadorFinalizacion;
     }
 
-    private class TemporizadorInterno extends CountDownTimer {
-        private Temporizador padre;
-
+    private static class TemporizadorInterno extends CountDownTimer {
+        private final Temporizador padre;
         public TemporizadorInterno(Temporizador padre, long milisegundosFuturos, long intervaloCuentaRegresiva) {
             super(milisegundosFuturos, intervaloCuentaRegresiva);
             this.padre = padre;
         }
-
         @Override
         public void onTick(long milisegundosRestantes) {
             padre.milisegundosRestantes = milisegundosRestantes;
@@ -67,34 +65,23 @@ public class Temporizador {
         temporizador.cancel();
         estaCorriendo = false;
     }
-
     public void reanudarTemporizador() {
         if (!estaCorriendo && temporizador.getMilisegundosRestantes() > 0) {
             temporizador = new TemporizadorInterno(this, temporizador.getMilisegundosRestantes(), intervaloCuentaRegresiva);
             iniciarTemporizador();
         }
     }
-
     public void iniciarTemporizador() {
         temporizador.start();
         estaCorriendo = true;
     }
-
     public void reiniciarTemporizador(CircularProgressIndicator barraProgresoCircular, TextView tiempo) {
         temporizador.cancel();
         temporizador = new TemporizadorInterno(this, milisegundosFuturos, intervaloCuentaRegresiva);
         barraProgresoCircular.setProgress((int) (milisegundosFuturos / 1000));
         tiempo.setText(String.format(Locale.getDefault(), "%02d:%02d", milisegundosFuturos / 60000, (milisegundosFuturos % 60000) / 1000));
     }
-
     public void destruirTemporizador() {
         temporizador.cancel();
     }
-    public void pararTemporizador() {
-        if (temporizador != null) {
-            temporizador.cancel();
-            temporizador = null;
-        }
-    }
-
 }
